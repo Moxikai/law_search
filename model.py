@@ -14,7 +14,7 @@ dbPath = os.path.join(baseDir,'law.db')
 
 engine = create_engine('sqlite:///%s'%dbPath)
 Base = declarative_base()
-DBsession = sessionmaker()
+DBsession = sessionmaker(bind=engine)
 session = DBsession()
 
 class Law(Base):
