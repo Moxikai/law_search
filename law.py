@@ -57,7 +57,7 @@ class LawSearch():
         self.baseDir = os.path.dirname(__file__)
         self.htmlCacheFolder = os.path.join(self.baseDir,'.cache')
         self.errorInfoPath = os.path.join(self.baseDir,'errorInfo.txt')
-        self.pageNo = 1
+        self.nowPageNo = 1
         self.downloadPageCount = 0
         self.downloadErrorCount = 0
         self.crawlDataCount = 0
@@ -270,14 +270,18 @@ class LawSearch():
 
                 if not self.parseNextUrl(listContent):
                     status = 0
-                self.pageNo += 1
+                    break
+                else:
+                    print '已到最后一页'
+                pageNo += 1
+                self.nowPageNo = pageNo
 
             except Exception as e:
                 print '程序出现错误:','\n',e
                 sleep(10)
             else:
                 print '下载页面数量:%s,下载失败数量:%s,采集数据数量:%s,采集失败数量:%s,当前列表页码%s'\
-                      %(self.downloadPageCount,self.downloadErrorCount,self.crawlDataCount,self.crawlErrorCount,self.pageNo)
+                      %(self.downloadPageCount,self.downloadErrorCount,self.crawlDataCount,self.crawlErrorCount,self.nowPageNo)
 
 if __name__ == '__main__':
 
