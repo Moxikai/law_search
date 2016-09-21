@@ -270,7 +270,7 @@ class LawSearch():
 
                 if not self.parseNextUrl(listContent):
                     status = 0
-                pageNo += 1
+                self.pageNo += 1
 
             except Exception as e:
                 print '程序出现错误:','\n',e
