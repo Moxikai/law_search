@@ -6,6 +6,7 @@
 
 import os
 from time import sleep
+from time import ctime
 import hashlib
 from random import uniform
 import sys
@@ -57,6 +58,7 @@ class LawSearch():
         self.htmlCacheFolder = os.path.join(self.baseDir,'.cache')
         self.errorInfoPath = os.path.join(self.baseDir,'errorInfo.txt')
         self.loadCountTotal = 0
+        self.pageNo = 1
 
     def checkLoadTimes(self):
         pass
@@ -84,6 +86,7 @@ class LawSearch():
                 return False
         except Exception as e:
             print '下载列表页第%s页失败'%pageid
+            self.saveErrorInfo(*['列表页:',pageid,'下载失败',ctime()])
 
     def downloadDetailPage(self,url):
 
@@ -93,6 +96,7 @@ class LawSearch():
             return r.content
         else:
             print '下载%s详细页面失败'%url
+            self.saveErrorInfo(*['详细页:',url,'下载失败',ctime()])
             return False
 
     def getSignName(self,string):
@@ -125,6 +129,14 @@ class LawSearch():
             print '加载缓存文件%s出错'%name
             return False
 
+    #保存下载错误信息
+    def saveErrorInfo(self,*args):
+
+        str = ''.join(args)
+        with open(self.errorInfoPath,'a') as f:
+            f.write(str)
+        print '错误信息已储存!'
+
     def getListContent(self,pageid):
 
         name = self.getSignName(self.urlPost)
@@ -149,52 +161,60 @@ class LawSearch():
 
     def parseListPage(self,content):
 
-        soup = BeautifulSoup(content,'lxml')
-        try:
-            return [[td.a.get('href'),td.a.get_text()] for td in soup.find_all('td',class_='f')]
-        except Exception as e:
-            print '解析列表页数据失败','\n',e
+        if content:
+            soup = BeautifulSoup(content,'lxml')
+            try:
+                return [[td.a.get('href'),td.a.get_text()] for td in soup.find_all('td',class_='f')]
+            except Exception as e:
+                print '解析列表页数据失败','\n',e
+                return False
+        else:
             return False
-
     def parseNextUrl(self,content):
 
-        status = 0
-        soup = BeautifulSoup(content,'lxml')
-        for item in soup.find_all('a'):
-            if item.get_text == '下一页' and item.get('href'):
-                status = 1
-                break
-        return status
+        if content:
+            status = 0
+            soup = BeautifulSoup(content,'lxml')
+            for item in soup.find_all('a'):
+                if item.get_text() == '下一页' and item.get('href'):
+                    status = 1
+                    break
+            return status
+        else:
+            return 2
 
 
     def parseDetailPage(self,content,url):
 
-        soup = BeautifulSoup(content,'lxml')
-        try:
+        if content:
+            soup = BeautifulSoup(content,'lxml')
+            try:
 
-            id = self.getSignName(url)
-            title = soup.find('div',class_='mtitle').get_text()
-            fonts = soup.find_all('font',color='red')
-            type = fonts[0].get_text()
-            publishDepartment = fonts[1].get_text()
-            status = fonts[2].get_text()
-            publishDate = fonts[3].get_text()
-            effectDate = fonts[4].get_text()
-            loseEffectDate = fonts[5].get_text()
-            content = ''.join(unicode(item) for item in soup.find_all('table',class_='aarticle')[1].contents)
-            return {'id':id,
-                    'title':title,
-                    'type':type,
-                    'publishDepartment':publishDepartment,
-                    'status':status,
-                    'publishDate':publishDate,
-                    'effectDate':effectDate,
-                    'loseEffectDate':loseEffectDate,
-                    'content':content,
-                    }
+                id = self.getSignName(url)
+                title = soup.find('div',class_='mtitle').get_text()
+                fonts = soup.find_all('font',color='red')
+                type = fonts[0].get_text()
+                publishDepartment = fonts[1].get_text()
+                status = fonts[2].get_text()
+                publishDate = fonts[3].get_text()
+                effectDate = fonts[4].get_text()
+                loseEffectDate = fonts[5].get_text()
+                content = ''.join(unicode(item) for item in soup.find_all('table',class_='aarticle')[1].contents)
+                return {'id':id,
+                        'title':title,
+                        'type':type,
+                        'publishDepartment':publishDepartment,
+                        'status':status,
+                        'publishDate':publishDate,
+                        'effectDate':effectDate,
+                        'loseEffectDate':loseEffectDate,
+                        'content':content,
+                        }
 
-        except Exception as e:
-            print '解析详细页面%s出错,请检查'%url,e
+            except Exception as e:
+                print '解析详细页面%s出错,请检查'%url,e
+        else:
+            return False
 
 
     def checkDumplicate(self,id):
@@ -223,26 +243,29 @@ class LawSearch():
     def run(self):
         status = 1
         pageNo = 1
-        while status:
+        while status == 1:
+            try:
+                listContent = self.getListContent(pageNo)
+                list = self.parseListPage(listContent)
+                for item in list:
+                    sleep(uniform(2,5))
+                    url = item[0]
+                    id = self.getSignName(url)
+                    #检测重复
+                    if not self.checkDumplicate(id):
+                        detailContent = self.getDetailContent(url)
+                        data = self.parseDetailPage(detailContent,url)
+                        self.saveToSQLite(**data)
+                    else:
+                        print '记录%s已存在,不需重复解析'%(item[1])
 
-            listContent = self.getListContent(pageNo)
-            list = self.parseListPage(listContent)
-            for item in list:
+                if not self.parseNextUrl(listContent):
+                    status = 0
+                pageNo += 1
                 sleep(uniform(2,5))
-                url = item[0]
-                id = self.getSignName(url)
-                #检测重复
-                if not self.checkDumplicate(id):
-                    detailContent = self.getDetailContent(url)
-                    data = self.parseDetailPage(detailContent,url)
-                    self.saveToSQLite(**data)
-                else:
-                    print '记录%s已存在,不需重复解析'%(item[1])
-
-            if self.parseNextUrl(listContent):
-                status = 0
-            pageNo += 1
-            sleep(uniform(2,5))
+            except Exception as e:
+                print '程序出现错误:','\n',e
+                sleep(10)
 
 if __name__ == '__main__':
 
