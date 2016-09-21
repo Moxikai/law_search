@@ -57,8 +57,11 @@ class LawSearch():
         self.baseDir = os.path.dirname(__file__)
         self.htmlCacheFolder = os.path.join(self.baseDir,'.cache')
         self.errorInfoPath = os.path.join(self.baseDir,'errorInfo.txt')
-        self.loadCountTotal = 0
         self.pageNo = 1
+        self.downloadPageCount = 0
+        self.downloadErrorCount = 0
+        self.crawlDataCount = 0
+        self.crawlErrorCount = 0
 
     def checkLoadTimes(self):
         pass
@@ -81,6 +84,7 @@ class LawSearch():
                               headers=self.headers)
             if r.status_code == 200:
                 #print r.content
+                self.downloadPageCount += 1
                 return r.content
             else:
                 return False
@@ -93,6 +97,7 @@ class LawSearch():
         r = requests.get(url,headers = self.headers2)
         if r.status_code == 200:
             print '页面%s下载成功'%(url)
+            self.downloadPageCount += 1
             return r.content
         else:
             print '下载%s详细页面失败'%url
@@ -223,22 +228,25 @@ class LawSearch():
         return True if law else False
 
     def saveToSQLite(self,**kwargs):
-
-        if self.checkDumplicate(kwargs['id']):
-            pass
-        else:
-            law = Law(id = kwargs['id'],
-                      title = kwargs['title'],
-                      type = kwargs['type'],
-                      publishDepartment = kwargs['publishDepartment'],
-                      status = kwargs['status'],
-                      publishDate = kwargs['publishDate'],
-                      effectDate = kwargs['effectDate'],
-                      loseEffectDate = kwargs['loseEffectDate'],
-                      content = kwargs['content'])
-            session.add(law)
-            session.commit()
-            print '记录%s保存成功'%(kwargs['title'])
+        try:
+            if self.checkDumplicate(kwargs['id']):
+                pass
+            else:
+                law = Law(id = kwargs['id'],
+                          title = kwargs['title'],
+                          type = kwargs['type'],
+                          publishDepartment = kwargs['publishDepartment'],
+                          status = kwargs['status'],
+                          publishDate = kwargs['publishDate'],
+                          effectDate = kwargs['effectDate'],
+                          loseEffectDate = kwargs['loseEffectDate'],
+                          content = kwargs['content'])
+                session.add(law)
+                session.commit()
+                self.crawlDataCount += 1
+                print '记录%s保存成功'%(kwargs['title'])
+        except Exception as e:
+            self.crawlErrorCount += 1
 
     def run(self):
         status = 1
@@ -256,16 +264,20 @@ class LawSearch():
                         detailContent = self.getDetailContent(url)
                         data = self.parseDetailPage(detailContent,url)
                         self.saveToSQLite(**data)
+                        sleep(uniform(2, 5))
                     else:
                         print '记录%s已存在,不需重复解析'%(item[1])
 
                 if not self.parseNextUrl(listContent):
                     status = 0
                 pageNo += 1
-                sleep(uniform(2,5))
+
             except Exception as e:
                 print '程序出现错误:','\n',e
                 sleep(10)
+            else:
+                print '下载页面数量:%s,下载失败数量:%s,采集数据数量:%s,采集失败数量:%s,当前列表页码%s'\
+                      %(self.downloadPageCount,self.downloadErrorCount,self.crawlDataCount,self.crawlErrorCount,self.pageNo)
 
 if __name__ == '__main__':
 
